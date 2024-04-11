@@ -40,6 +40,15 @@
 
 struct vnode;
 
+struct region_struct {
+        vaddr_t vir_start;
+        size_t region_size;
+        int readable;
+        int writeable;
+        int executable;
+        struct region_struct *next_region;
+}
+
 
 /*
  * Address space - data structure associated with the virtual memory
@@ -59,6 +68,8 @@ struct addrspace {
         paddr_t as_stackpbase;
 #else
         /* Put stuff here for your VM system */
+        paddr_t **level_1_page_table;
+        struct region_struct *region_head; 
 #endif
 };
 

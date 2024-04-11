@@ -61,6 +61,13 @@ as_create(void)
 	/*
 	 * Initialize as needed.
 	 */
+	as->level_1_page_table = kmalloc(2048 * sizeof(paddr_t *));
+	int i = 0;
+	while (i < 2048) {
+		as->level_1_page_table[i] = NULL;
+		i = i + 1;
+	}
+	as->region_head = NULL;
 
 	return as;
 }
@@ -78,9 +85,38 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	/*
 	 * Write this.
 	 */
-
-	(void)old;
-
+	// Brute force copy for 2-level page table
+	for (int i = 0; i < 2048; i++) {
+		for (int j = 0; j < 512; j++) {
+			if (old->level_1_page_table[i] == NULL) {
+				break;
+			}
+			else if (old->level_1_page_table[i][j] != 0) { // Could be NULL instead of 0 here
+				memmove(newas->level_1_page_table[i][j], old->level_1_page_table[i][j], PAGE_SIZE);
+			}
+		}
+	}
+	// Brute force copy for all the region structs
+	struct region_struct *temp;
+	temp = old->region_head;
+	struct region_struct *curr_region;
+	curr_region = NULL;
+	while (temp != NULL) {
+		struct region_struct *newRegion = kmalloc(sizeof(struct region_struct *));
+		newRegion->vir_start = temp->vir_start;
+        newRegion->region_size = temp->region_size;
+        newRegion->readable = temp->readable;
+        newRegion->writeable = temp->writeable;
+        newRegion->executable = temp->executable; 
+        newRegion->next_region = NULL;
+		if (newas->region_head == NULL){
+			newas->region_head = newRegion;
+		} else {
+			curr_region->next_region = newRegion;
+		}
+		curr_region = newRegion;
+		temp = temp->next_region;
+	}
 	*ret = newas;
 	return 0;
 }
@@ -91,7 +127,22 @@ as_destroy(struct addrspace *as)
 	/*
 	 * Clean up as needed.
 	 */
-
+	// Brute force free of all level 2 tables first then the level 1 table
+	for (int i = 0; i < 2048; i++) {
+		if (as->level_1_page_table[i] != NULL) {
+			kfree(as->level_1_page_table[i]);
+		}	
+	}
+	kfree(as->level_1_page_table);
+	// Brute force free of all the structs for regions
+	struct region_struct *temp;
+	temp = as->region_head;
+	while (temp != NULL) {
+		struct region_struct *dup;
+		dup = temp;
+		temp = temp->next_region;
+		kfree(dup);
+	}
 	kfree(as);
 }
 
@@ -112,6 +163,15 @@ as_activate(void)
 	/*
 	 * Write this.
 	 */
+	// Copied from dumbvm
+	/* Disable interrupts on this CPU while frobbing the TLB. */
+	int spl = splhigh();
+
+	for (int i=0; i<NUM_TLB; i++) {
+		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
+	}
+
+	splx(spl);
 }
 
 void
@@ -122,6 +182,31 @@ as_deactivate(void)
 	 * anything. See proc.c for an explanation of why it (might)
 	 * be needed.
 	 */
+
+	// Copied from as_activate
+	struct addrspace *as;
+
+	as = proc_getas();
+	if (as == NULL) {
+		/*
+		 * Kernel thread without an address space; leave the
+		 * prior address space in place.
+		 */
+		return;
+	}
+
+	/*
+	 * Write this.
+	 */
+	// Copied from dumbvm
+	/* Disable interrupts on this CPU while frobbing the TLB. */
+	int spl = splhigh();
+
+	for (int i=0; i<NUM_TLB; i++) {
+		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
+	}
+
+	splx(spl);
 }
 
 /*
@@ -148,6 +233,13 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	(void)readable;
 	(void)writeable;
 	(void)executable;
+
+	// /* Align the region. First, the base... */
+	// sz += vaddr & ~(vaddr_t)PAGE_FRAME;
+	// vaddr &= PAGE_FRAME;
+
+	// /* ...and now the length. */
+	// sz = (sz + PAGE_SIZE - 1) & PAGE_FRAME;
 	return ENOSYS; /* Unimplemented */
 }
 
