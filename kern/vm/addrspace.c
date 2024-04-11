@@ -62,6 +62,9 @@ as_create(void)
 	 * Initialize as needed.
 	 */
 	as->level_1_page_table = kmalloc(2048 * sizeof(paddr_t *));
+	if (as->level_1_page_table == NULL) {
+		return NULL;
+	}
 	int i = 0;
 	while (i < 2048) {
 		as->level_1_page_table[i] = NULL;
@@ -103,11 +106,15 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	curr_region = NULL;
 	while (temp != NULL) {
 		struct region_struct *newRegion = kmalloc(sizeof(struct region_struct *));
+		if (newRegion == NULL) {
+			return ENOMEM;
+		}
 		newRegion->vir_start = temp->vir_start;
         newRegion->region_size = temp->region_size;
         newRegion->readable = temp->readable;
         newRegion->writeable = temp->writeable;
         newRegion->executable = temp->executable; 
+		newRegion->correct_status = temp->correct_status;
         newRegion->next_region = NULL;
 		if (newas->region_head == NULL){
 			newas->region_head = newRegion;
@@ -227,20 +234,38 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	 * Write this.
 	 */
 
-	(void)as;
-	(void)vaddr;
-	(void)memsize;
-	(void)readable;
-	(void)writeable;
-	(void)executable;
+	// Copied from dumbvm
+	/* Align the region. First, the base... */
+	memsize += vaddr & ~(vaddr_t)PAGE_FRAME;
+	vaddr &= PAGE_FRAME;
+	/* ...and now the length. */
+	memsize = (memsize + PAGE_SIZE - 1) & PAGE_FRAME;
 
-	// /* Align the region. First, the base... */
-	// sz += vaddr & ~(vaddr_t)PAGE_FRAME;
-	// vaddr &= PAGE_FRAME;
 
-	// /* ...and now the length. */
-	// sz = (sz + PAGE_SIZE - 1) & PAGE_FRAME;
-	return ENOSYS; /* Unimplemented */
+	struct region_struct *newRegion = kmalloc(sizeof(struct region_struct *));
+	if (newRegion == NULL) {
+		return ENOMEM;
+	}
+	newRegion->vir_start = vaddr;
+	newRegion->region_size = memsize;
+	newRegion->readable = readable;
+	newRegion->writeable = writeable;
+	newRegion->executable = executable;
+	newRegion->correct_status = writeable;
+	newRegion->next_region = NULL;
+
+	if (as->region_head == NULL) {
+		as->region_head = newRegion;
+	} else {
+		struct region_struct *temp;
+		temp = as->region_head;
+		while (temp->next_region != NULL) {
+			temp = temp->next_region;
+		}
+		temp->next_region = newRegion;
+	}
+
+	return 0; /* Unimplemented */
 }
 
 int
@@ -250,7 +275,12 @@ as_prepare_load(struct addrspace *as)
 	 * Write this.
 	 */
 
-	(void)as;
+	struct region_struct *temp;
+	temp = as->region_head;
+	while (temp!= NULL) {
+		temp->writable = 1;
+		temp = temp->next_region;
+	}
 	return 0;
 }
 
@@ -261,7 +291,12 @@ as_complete_load(struct addrspace *as)
 	 * Write this.
 	 */
 
-	(void)as;
+	struct region_struct *temp;
+	temp = as->region_head;
+	while (temp!= NULL) {
+		temp->writable = temp->correct_status;
+		temp = temp->next_region;
+	}
 	return 0;
 }
 
@@ -272,7 +307,10 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	 * Write this.
 	 */
 
-	(void)as;
+	int err = as_define_region(as, USERSTACK - (16 * PAGE_SIZE), 16 * PAGE_SIZE, 1, 1, 1);
+	if (err != 0) {
+		return err;
+	}
 
 	/* Initial user-level stack pointer */
 	*stackptr = USERSTACK;
