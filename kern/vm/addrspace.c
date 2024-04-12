@@ -278,7 +278,7 @@ as_prepare_load(struct addrspace *as)
 	struct region_struct *temp;
 	temp = as->region_head;
 	while (temp!= NULL) {
-		temp->writable = 1;
+		temp->writeable = 1;
 		temp = temp->next_region;
 	}
 	return 0;
@@ -294,7 +294,7 @@ as_complete_load(struct addrspace *as)
 	struct region_struct *temp;
 	temp = as->region_head;
 	while (temp!= NULL) {
-		temp->writable = temp->correct_status;
+		temp->writeable = temp->correct_status;
 		temp = temp->next_region;
 	}
 	return 0;
