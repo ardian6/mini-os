@@ -241,7 +241,6 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	/* ...and now the length. */
 	memsize = (memsize + PAGE_SIZE - 1) & PAGE_FRAME;
 
-
 	struct region_struct *newRegion = kmalloc(sizeof(struct region_struct *));
 	if (newRegion == NULL) {
 		return ENOMEM;
