@@ -5,6 +5,8 @@
 #include <addrspace.h>
 #include <vm.h>
 #include <machine/tlb.h>
+#include <proc.h>
+#include <spl.h>
 
 /* Place your page table functions here */
 
@@ -41,12 +43,23 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     vaddr_t offset = (faultaddress << 20) >> 20;
 
     struct addrspace *as = proc_getas();
+    if (as == NULL) {
+		/*
+		 * No address space set up. This is probably also a
+		 * kernel fault early in boot.
+		 */
+		return EFAULT;
+	}
+
+    int spl;
     if (as->level_1_page_table[most_sig_11_bits] != NULL) {
         if (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] != 0) {
             // Might have to convert from paddr to vaddr
-            paddr_t frame_num = as->level_1_page_table[most_sig_11_bits][most_sig_9_bits];
+            paddr_t frame_num = KVADDR_TO_PADDR(as->level_1_page_table[most_sig_11_bits][most_sig_9_bits]);
             paddr_t entrylo = offset + (frame_num << 12);
+            spl = splhigh();
             tlb_random(faultaddress, entrylo);
+            splx(spl);
             return 0;
         }
     }
@@ -58,7 +71,10 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     // Check for invalid regions
     vaddr_t top;
     size_t end;
-    struct region_head *cur = NULL;
+    
+    struct region_struct *cur;
+    cur = as->region_head;
+
     int found = 0;
     while (cur != NULL) {
         top = cur->vir_start;
@@ -81,9 +97,12 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     }
     // Allocate frame
     as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] = alloc_kpages(1);
-    paddr_t frame_num = as->level_1_page_table[most_sig_11_bits][most_sig_9_bits];
+    paddr_t frame_num = KVADDR_TO_PADDR(as->level_1_page_table[most_sig_11_bits][most_sig_9_bits]);
     paddr_t entrylo = offset + (frame_num << 12);
+
+    spl = splhigh();
     tlb_random(faultaddress, entrylo);
+    splx(spl);
     
 
     return 0;

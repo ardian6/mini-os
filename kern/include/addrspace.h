@@ -48,7 +48,7 @@ struct region_struct {
         int executable;
         int correct_status;
         struct region_struct *next_region;
-}
+};
 
 
 /*

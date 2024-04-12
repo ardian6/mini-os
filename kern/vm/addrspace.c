@@ -95,7 +95,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 				break;
 			}
 			else if (old->level_1_page_table[i][j] != 0) { // Could be NULL instead of 0 here
-				memmove(newas->level_1_page_table[i][j], old->level_1_page_table[i][j], PAGE_SIZE);
+				memmove((void *)newas->level_1_page_table[i][j], (void *)old->level_1_page_table[i][j], PAGE_SIZE);
 			}
 		}
 	}
