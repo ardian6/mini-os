@@ -35,12 +35,18 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         return EFAULT;
     }
 
+    // If faulttype doesnt equal one of these ret EINVAL (invalid arg)
+    if (faulttype != VM_FAULT_READ && faulttype != VM_FAULT_WRITE) {
+        return EINVAL;
+    }
+
     // MIGHT NOT WORK
     // most_sig_11_bits = top level PT number 
     // most_sig_9_bits = 2nd level PT number
+
     vaddr_t most_sig_11_bits = faultaddress >> 21;
     vaddr_t most_sig_9_bits = (faultaddress << 11) >> 23;
-    vaddr_t offset = (faultaddress << 20) >> 20;
+    // vaddr_t offset = (faultaddress << 20) >> 20;
 
     struct addrspace *as = proc_getas();
     if (as == NULL) {
@@ -54,11 +60,10 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     int spl;
     if (as->level_1_page_table[most_sig_11_bits] != NULL) {
         if (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] != 0) {
-            // Might have to convert from paddr to vaddr
-            paddr_t frame_num = KVADDR_TO_PADDR(as->level_1_page_table[most_sig_11_bits][most_sig_9_bits]);
-            paddr_t entrylo = offset + (frame_num << 12);
+            paddr_t entrylo = as->level_1_page_table[most_sig_11_bits][most_sig_9_bits];
+            vaddr_t entryhi = (faultaddress >> 12) << 12;
             spl = splhigh();
-            tlb_random(faultaddress, entrylo);
+            tlb_random(entryhi, entrylo);
             splx(spl);
             return 0;
         }
@@ -76,11 +81,15 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     cur = as->region_head;
 
     int found = 0;
+    int is_writeable = 0;
     while (cur != NULL) {
         top = cur->vir_start;
         end = top + cur->region_size;
         if (faultaddress >= top && faultaddress < end) {
             found = 1;
+            if (cur->writeable == 1) {
+                is_writeable = 1;
+            }
         }
 
         cur = cur->next_region;   
@@ -94,14 +103,29 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
     if (as->level_1_page_table[most_sig_11_bits] == NULL) {
         as->level_1_page_table[most_sig_11_bits] = kmalloc(512 * sizeof(paddr_t));
+        if (as->level_1_page_table[most_sig_11_bits] == NULL) {
+            return ENOMEM;
+        }
     }
+
+    for (int i = 0; i < 512; i++) {
+        as->level_1_page_table[most_sig_11_bits][i] = 0;
+    }
+
     // Allocate frame
-    as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] = alloc_kpages(1);
-    paddr_t frame_num = KVADDR_TO_PADDR(as->level_1_page_table[most_sig_11_bits][most_sig_9_bits]);
-    paddr_t entrylo = offset + (frame_num << 12);
+    as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] = KVADDR_TO_PADDR(alloc_kpages(1));
+    if (is_writeable == 1) {
+        as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] = as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] | TLBLO_DIRTY;
+    }
+    as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] = as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] | TLBLO_VALID;
+    // paddr_t frame_num = as->level_1_page_table[most_sig_11_bits][most_sig_9_bits];
+    
+    // Bit shift to get rid of offset (last 12 bits)
+    paddr_t entrylo = as->level_1_page_table[most_sig_11_bits][most_sig_9_bits];
+    vaddr_t entryhi = (faultaddress >> 12) << 12;
 
     spl = splhigh();
-    tlb_random(faultaddress, entrylo);
+    tlb_random(entryhi, entrylo);
     splx(spl);
     
 

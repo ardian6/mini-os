@@ -62,7 +62,9 @@ as_create(void)
 	 * Initialize as needed.
 	 */
 	as->level_1_page_table = kmalloc(2048 * sizeof(paddr_t *));
+
 	if (as->level_1_page_table == NULL) {
+		kfree(as);
 		return NULL;
 	}
 	int i = 0;
@@ -137,6 +139,11 @@ as_destroy(struct addrspace *as)
 	// Brute force free of all level 2 tables first then the level 1 table
 	for (int i = 0; i < 2048; i++) {
 		if (as->level_1_page_table[i] != NULL) {
+			for (int j = 0; j < 512; j++) {
+				if (as->level_1_page_table[i][j] != 0) {
+					free_kpages(PADDR_TO_KVADDR(as->level_1_page_table[i][j]));
+				}
+			}
 			kfree(as->level_1_page_table[i]);
 		}	
 	}
@@ -230,9 +237,9 @@ int
 as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 		 int readable, int writeable, int executable)
 {
-	/*
-	 * Write this.
-	 */
+	// 
+	// CHECK FOR REGION OVERLAP ERROR
+	//
 
 	// Copied from dumbvm
 	/* Align the region. First, the base... */
@@ -270,13 +277,10 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 int
 as_prepare_load(struct addrspace *as)
 {
-	/*
-	 * Write this.
-	 */
 
 	struct region_struct *temp;
 	temp = as->region_head;
-	while (temp!= NULL) {
+	while (temp != NULL) {
 		temp->writeable = 1;
 		temp = temp->next_region;
 	}
@@ -286,9 +290,6 @@ as_prepare_load(struct addrspace *as)
 int
 as_complete_load(struct addrspace *as)
 {
-	/*
-	 * Write this.
-	 */
 
 	struct region_struct *temp;
 	temp = as->region_head;
