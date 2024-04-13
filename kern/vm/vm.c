@@ -48,7 +48,9 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     vaddr_t most_sig_9_bits = (faultaddress << 11) >> 23;
     // vaddr_t offset = (faultaddress << 20) >> 20;
 
-    struct addrspace *as = proc_getas();
+
+    struct addrspace *as = NULL;
+    as = proc_getas();
     if (as == NULL) {
 		/*
 		 * No address space set up. This is probably also a
@@ -57,22 +59,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		return EFAULT;
 	}
 
-    int spl;
-    if (as->level_1_page_table[most_sig_11_bits] != NULL) {
-        if (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] != 0) {
-            paddr_t entrylo = as->level_1_page_table[most_sig_11_bits][most_sig_9_bits];
-            vaddr_t entryhi = (faultaddress >> 12) << 12;
-            spl = splhigh();
-            tlb_random(entryhi, entrylo);
-            splx(spl);
-            return 0;
-        }
-    }
-
-    if (as->region_head == NULL) {
-        return EFAULT;
-    }
-
+    // This step is done before looking for valid page translation, we want correct writeable status
     // Check for invalid regions
     vaddr_t top;
     size_t end;
@@ -85,7 +72,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     while (cur != NULL) {
         top = cur->vir_start;
         end = top + cur->region_size;
-        if (faultaddress >= top && faultaddress < end) {
+        if ((faultaddress >= top) && (faultaddress < end)) {
             found = 1;
             if (cur->writeable == 1) {
                 is_writeable = 1;
@@ -99,6 +86,29 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         return EFAULT;
     }
 
+
+    int spl;
+    if (as->level_1_page_table[most_sig_11_bits] != NULL) {
+        if (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] != 0) {
+            paddr_t entrylo = (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] & PAGE_FRAME) | TLBLO_DIRTY | TLBLO_VALID;
+            if (is_writeable == 1) {
+                entrylo = (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] & PAGE_FRAME) | TLBLO_DIRTY | TLBLO_VALID;
+            } else {
+                // entrylo = (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] & PAGE_FRAME) | 0 | TLBLO_VALID;
+            }
+            vaddr_t entryhi = (faultaddress >> 12) << 12;
+            spl = splhigh();
+            tlb_random(entryhi, entrylo);
+            splx(spl);
+            return 0;
+        }
+    }
+
+    if (as->region_head == NULL) {
+        return EFAULT;
+    }
+
+    
     // Translation Not Valid, Region Valid
 
     if (as->level_1_page_table[most_sig_11_bits] == NULL) {
@@ -106,22 +116,22 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         if (as->level_1_page_table[most_sig_11_bits] == NULL) {
             return ENOMEM;
         }
-    }
-
-    for (int i = 0; i < 512; i++) {
-        as->level_1_page_table[most_sig_11_bits][i] = 0;
+        for (int i = 0; i < 512; i++) {
+            as->level_1_page_table[most_sig_11_bits][i] = 0;
+        }
     }
 
     // Allocate frame
     as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] = KVADDR_TO_PADDR(alloc_kpages(1));
-    if (is_writeable == 1) {
-        as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] = as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] | TLBLO_DIRTY;
-    }
-    as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] = as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] | TLBLO_VALID;
-    // paddr_t frame_num = as->level_1_page_table[most_sig_11_bits][most_sig_9_bits];
-    
+
     // Bit shift to get rid of offset (last 12 bits)
-    paddr_t entrylo = as->level_1_page_table[most_sig_11_bits][most_sig_9_bits];
+    paddr_t entrylo = (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] & PAGE_FRAME) | TLBLO_DIRTY | TLBLO_VALID;
+    if (is_writeable == 1) {
+        entrylo = (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] & PAGE_FRAME) | TLBLO_DIRTY | TLBLO_VALID;
+    } else {
+        // entrylo = (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] & PAGE_FRAME) | 0 | TLBLO_VALID;
+    }
+
     vaddr_t entryhi = (faultaddress >> 12) << 12;
 
     spl = splhigh();

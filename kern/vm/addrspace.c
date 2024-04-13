@@ -73,6 +73,7 @@ as_create(void)
 		as->level_1_page_table[i] = NULL;
 		i = i + 1;
 	}
+
 	as->region_head = NULL;
 
 	return as;
@@ -88,27 +89,13 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		return ENOMEM;
 	}
 
-	/*
-	 * Write this.
-	 */
-	// Brute force copy for 2-level page table
-	for (int i = 0; i < 2048; i++) {
-		for (int j = 0; j < 512; j++) {
-			if (old->level_1_page_table[i] == NULL) {
-				break;
-			}
-			else if (old->level_1_page_table[i][j] != 0) { // Could be NULL instead of 0 here
-				memmove((void *)newas->level_1_page_table[i][j], (void *)old->level_1_page_table[i][j], PAGE_SIZE);
-			}
-		}
-	}
 	// Brute force copy for all the region structs
 	struct region_struct *temp;
 	temp = old->region_head;
 	struct region_struct *curr_region;
 	curr_region = NULL;
 	while (temp != NULL) {
-		struct region_struct *newRegion = kmalloc(sizeof(struct region_struct *));
+		struct region_struct *newRegion = kmalloc(sizeof(struct region_struct));
 		if (newRegion == NULL) {
 			return ENOMEM;
 		}
@@ -119,6 +106,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
         newRegion->executable = temp->executable; 
 		newRegion->correct_status = temp->correct_status;
         newRegion->next_region = NULL;
+
 		if (newas->region_head == NULL){
 			newas->region_head = newRegion;
 		} else {
@@ -127,6 +115,30 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		curr_region = newRegion;
 		temp = temp->next_region;
 	}
+
+	/*
+	 * Write this.
+	 */
+	// Brute force copy for 2-level page table
+	for (int i = 0; i < 2048; i++) {
+		if (old->level_1_page_table[i] != NULL) {
+			newas->level_1_page_table = kmalloc(512 * sizeof(paddr_t));
+			for (int j = 0; j < 512; j++) {
+				if (old->level_1_page_table[i][j] == 0) {
+					newas->level_1_page_table[i][j] = 0;
+				} else {
+					paddr_t new_frame = KVADDR_TO_PADDR(alloc_kpages(1));
+					// memmove((void *)newas->level_1_page_table[i][j], (const void *)PADDR_TO_KVADDR(old->level_1_page_table[i][j] & PAGE_FRAME), PAGE_SIZE);
+
+					memmove((void *)new_frame, (const void *)old->level_1_page_table[i][j], PAGE_SIZE);
+
+					newas->level_1_page_table[i][j] = new_frame;
+				}
+			}
+		}
+	}
+
+	
 	*ret = newas;
 	return 0;
 }
@@ -134,7 +146,6 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 void
 as_destroy(struct addrspace *as)
 {
-
 	/*
 	 * Clean up as needed.
 	 */
@@ -143,7 +154,7 @@ as_destroy(struct addrspace *as)
 		if (as->level_1_page_table[i] != NULL) {
 			for (int j = 0; j < 512; j++) {
 				if (as->level_1_page_table[i][j] != 0) {
-					free_kpages(PADDR_TO_KVADDR(as->level_1_page_table[i][j]));
+					free_kpages(PADDR_TO_KVADDR(as->level_1_page_table[i][j] & PAGE_FRAME));
 				}
 			}
 			kfree(as->level_1_page_table[i]);
@@ -271,6 +282,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 			temp = temp->next_region;
 		}
 		temp->next_region = newRegion;
+
 	}
 
 
@@ -300,6 +312,16 @@ as_complete_load(struct addrspace *as)
 		temp->writeable = temp->correct_status;
 		temp = temp->next_region;
 	}
+
+	/* Disable interrupts on this CPU while frobbing the TLB. */
+	int spl = splhigh();
+
+	for (int i=0; i<NUM_TLB; i++) {
+		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
+	}
+
+	splx(spl);
+		
 	return 0;
 }
 
