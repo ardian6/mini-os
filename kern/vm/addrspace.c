@@ -62,6 +62,7 @@ as_create(void)
 	 * Initialize as needed.
 	 */
 	as->level_1_page_table = kmalloc(2048 * sizeof(paddr_t *));
+	// as->level_1_page_table = (paddr_t **)alloc_kpages(2);
 
 	if (as->level_1_page_table == NULL) {
 		kfree(as);
@@ -133,6 +134,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 void
 as_destroy(struct addrspace *as)
 {
+
 	/*
 	 * Clean up as needed.
 	 */
@@ -248,7 +250,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	/* ...and now the length. */
 	memsize = (memsize + PAGE_SIZE - 1) & PAGE_FRAME;
 
-	struct region_struct *newRegion = kmalloc(sizeof(struct region_struct *));
+	struct region_struct *newRegion = kmalloc(sizeof(struct region_struct));
 	if (newRegion == NULL) {
 		return ENOMEM;
 	}
@@ -270,6 +272,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 		}
 		temp->next_region = newRegion;
 	}
+
 
 	return 0; /* Unimplemented */
 }
