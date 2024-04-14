@@ -120,19 +120,18 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	 * Write this.
 	 */
 	// Brute force copy for 2-level page table
+
 	for (int i = 0; i < 2048; i++) {
 		if (old->level_1_page_table[i] != NULL) {
-			newas->level_1_page_table = kmalloc(512 * sizeof(paddr_t));
+			newas->level_1_page_table[i] = kmalloc(512 * sizeof(paddr_t));
+
 			for (int j = 0; j < 512; j++) {
 				if (old->level_1_page_table[i][j] == 0) {
 					newas->level_1_page_table[i][j] = 0;
 				} else {
-					paddr_t new_frame = KVADDR_TO_PADDR(alloc_kpages(1));
-					// memmove((void *)newas->level_1_page_table[i][j], (const void *)PADDR_TO_KVADDR(old->level_1_page_table[i][j] & PAGE_FRAME), PAGE_SIZE);
-
-					memmove((void *)new_frame, (const void *)old->level_1_page_table[i][j], PAGE_SIZE);
-
-					newas->level_1_page_table[i][j] = new_frame;
+					vaddr_t new_frame = alloc_kpages(1);
+					memmove((void *)new_frame, (const void *)PADDR_TO_KVADDR(old->level_1_page_table[i][j]), PAGE_SIZE);
+					newas->level_1_page_table[i][j] = KVADDR_TO_PADDR(new_frame);
 				}
 			}
 		}
@@ -308,7 +307,7 @@ as_complete_load(struct addrspace *as)
 
 	struct region_struct *temp;
 	temp = as->region_head;
-	while (temp!= NULL) {
+	while (temp != NULL) {
 		temp->writeable = temp->correct_status;
 		temp = temp->next_region;
 	}
