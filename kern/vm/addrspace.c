@@ -130,6 +130,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 					newas->level_1_page_table[i][j] = 0;
 				} else {
 					vaddr_t new_frame = alloc_kpages(1);
+    				bzero((void *)new_frame, PAGE_SIZE);
 					memmove((void *)new_frame, (const void *)PADDR_TO_KVADDR(old->level_1_page_table[i][j]), PAGE_SIZE);
 					newas->level_1_page_table[i][j] = KVADDR_TO_PADDR(new_frame);
 				}

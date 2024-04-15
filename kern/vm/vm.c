@@ -123,6 +123,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
     // Allocate frame
     as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] = KVADDR_TO_PADDR(alloc_kpages(1));
+    bzero((void *)PADDR_TO_KVADDR(as->level_1_page_table[most_sig_11_bits][most_sig_9_bits]), PAGE_SIZE);
 
     // Bit shift to get rid of offset (last 12 bits)
     paddr_t entrylo = (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] & PAGE_FRAME) | TLBLO_DIRTY | TLBLO_VALID;
