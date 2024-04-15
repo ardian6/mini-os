@@ -68,15 +68,11 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     cur = as->region_head;
 
     int found = 0;
-    int is_writeable = 0;
     while (cur != NULL) {
         top = cur->vir_start;
         end = top + cur->region_size;
         if ((faultaddress >= top) && (faultaddress < end)) {
             found = 1;
-            if (cur->writeable == 1) {
-                is_writeable = 1;
-            }
         }
 
         cur = cur->next_region;   
@@ -91,11 +87,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     if (as->level_1_page_table[most_sig_11_bits] != NULL) {
         if (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] != 0) {
             paddr_t entrylo = (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] & PAGE_FRAME) | TLBLO_DIRTY | TLBLO_VALID;
-            if (is_writeable == 1) {
-                entrylo = (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] & PAGE_FRAME) | TLBLO_DIRTY | TLBLO_VALID;
-            } else {
-                // entrylo = (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] & PAGE_FRAME) | 0 | TLBLO_VALID;
-            }
             vaddr_t entryhi = (faultaddress >> 12) << 12;
             spl = splhigh();
             tlb_random(entryhi, entrylo);
@@ -127,11 +118,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
     // Bit shift to get rid of offset (last 12 bits)
     paddr_t entrylo = (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] & PAGE_FRAME) | TLBLO_DIRTY | TLBLO_VALID;
-    if (is_writeable == 1) {
-        entrylo = (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] & PAGE_FRAME) | TLBLO_DIRTY | TLBLO_VALID;
-    } else {
-        // entrylo = (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] & PAGE_FRAME) | 0 | TLBLO_VALID;
-    }
 
     vaddr_t entryhi = (faultaddress >> 12) << 12;
 
