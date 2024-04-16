@@ -7,6 +7,7 @@
 #include <machine/tlb.h>
 #include <proc.h>
 #include <spl.h>
+#include <elf.h>
 
 /* Place your page table functions here */
 
@@ -76,13 +77,13 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         end = top + cur->region_size;
         if ((faultaddress >= top) && (faultaddress < end)) {
             found = 1;
-            if (cur->writeable == 2) {
+            if (cur->writeable == PF_W) {
                 is_writeable = 1;
             }
-            if (cur->readable == 4) {
+            if (cur->readable == PF_R) {
                 is_readable = 1;
             }
-            if (cur->executable == 1) {
+            if (cur->executable == PF_X) {
                 is_executable = 1;
             }
         }

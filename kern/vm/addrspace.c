@@ -37,6 +37,7 @@
 #include <addrspace.h>
 #include <vm.h>
 #include <proc.h>
+#include <elf.h>
 
 /*
  * Note! If OPT_DUMBVM is set, as is the case until you start the VM
@@ -296,7 +297,7 @@ as_prepare_load(struct addrspace *as)
 	struct region_struct *temp;
 	temp = as->region_head;
 	while (temp != NULL) {
-		temp->writeable = 2;
+		temp->writeable = PF_W;
 		temp = temp->next_region;
 	}
 	return 0;
@@ -332,7 +333,7 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	 * Write this.
 	 */
 
-	int err = as_define_region(as, USERSTACK - (16 * PAGE_SIZE), 16 * PAGE_SIZE, 4, 2, 1);
+	int err = as_define_region(as, USERSTACK - (16 * PAGE_SIZE), 16 * PAGE_SIZE, PF_R, PF_W, PF_X);
 	if (err != 0) {
 		return err;
 	}
