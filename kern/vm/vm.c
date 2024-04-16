@@ -24,13 +24,7 @@ void vm_bootstrap(void)
 int
 vm_fault(int faulttype, vaddr_t faultaddress)
 {
-    /*
-    (void) faulttype;
-    (void) faultaddress;
 
-    panic("vm_fault hasn't been written yet\n");
-    */
-    
     // Check for readonly and return EFAULT if yes
     if (faulttype == VM_FAULT_READONLY) {
         return EFAULT;
@@ -41,14 +35,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         return EINVAL;
     }
 
-    // MIGHT NOT WORK
-    // most_sig_11_bits = top level PT number 
-    // most_sig_9_bits = 2nd level PT number
-
     vaddr_t most_sig_11_bits = faultaddress >> 21;
     vaddr_t most_sig_9_bits = (faultaddress << 11) >> 23;
-    // vaddr_t offset = (faultaddress << 20) >> 20;
-
 
     struct addrspace *as = NULL;
     as = proc_getas();
@@ -108,8 +96,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
                 entrylo = (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] & PAGE_FRAME) | 0 | TLBLO_VALID;
             }
 
-            // paddr_t entrylo = (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] & PAGE_FRAME) | TLBLO_DIRTY | TLBLO_VALID;
-
             vaddr_t entryhi = (faultaddress >> 12) << 12;
             spl = splhigh();
             tlb_random(entryhi, entrylo);
@@ -124,7 +110,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
     
     // Translation Not Valid, Region Valid
-
     if (as->level_1_page_table[most_sig_11_bits] == NULL) {
         as->level_1_page_table[most_sig_11_bits] = kmalloc(512 * sizeof(paddr_t));
         if (as->level_1_page_table[most_sig_11_bits] == NULL) {
@@ -138,9 +123,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     // Allocate frame
     as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] = KVADDR_TO_PADDR(alloc_kpages(1));
     bzero((void *)PADDR_TO_KVADDR(as->level_1_page_table[most_sig_11_bits][most_sig_9_bits]), PAGE_SIZE);
-
-    // Bit shift to get rid of offset (last 12 bits)
-    // paddr_t entrylo = (as->level_1_page_table[most_sig_11_bits][most_sig_9_bits] & PAGE_FRAME) | TLBLO_DIRTY | TLBLO_VALID;
 
     paddr_t entrylo;
     if (is_executable == 0 && is_writeable == 0 && is_readable == 0) {

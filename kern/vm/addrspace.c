@@ -63,7 +63,6 @@ as_create(void)
 	 * Initialize as needed.
 	 */
 	as->level_1_page_table = kmalloc(2048 * sizeof(paddr_t *));
-	// as->level_1_page_table = (paddr_t **)alloc_kpages(2);
 
 	if (as->level_1_page_table == NULL) {
 		kfree(as);
@@ -251,10 +250,6 @@ int
 as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 		 int readable, int writeable, int executable)
 {
-	// 
-	// CHECK FOR REGION OVERLAP ERROR
-	//
-
 	// Copied from dumbvm
 	/* Align the region. First, the base... */
 	memsize += vaddr & ~(vaddr_t)PAGE_FRAME;
@@ -287,7 +282,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	}
 
 
-	return 0; /* Unimplemented */
+	return 0;
 }
 
 int
